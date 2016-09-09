@@ -1,0 +1,62 @@
+<?php
+include("../lib/apicall.php");
+
+try {
+  auth();
+  
+  if (!$_REQUEST['name']) {
+    throw new Exception("CreateOrder requires argument \"name\"", ERR_INCORRECT_ARGUMENTS);
+  }
+  if (!$_REQUEST['comments']) {
+    $_REQUEST['comments'] = '';
+    $argc++;
+  }
+  if (!isset($_REQUEST['duedate'])) {
+    $argc++;
+  }
+  if ($argc != 3) {
+    throw new Exception("CreateOrder takes four arguments: name, (optional) comments, (optional) duedate", ERR_INCORRECT_ARGUMENTS);
+  }
+
+  debuglog($_SERVER['QUERY_STRING']);
+//  $dt = $plunet->parsedate($_REQUEST['duedate']);
+  $dt = $_REQUEST['duedate'];
+  debuglog("Due date $dt");
+  $ret = update("insert into orders (user, usergroup, name, comments, duedate, status, created, modified) values (:uid, :gid, :name, :comments, :due, 'new', sysdate(), sysdate())", array(':uid'=>$_SETTINGS['user']['id'], ':gid'=>$_SETTINGS['user']['usergroup'], ':name'=>$_REQUEST['name'], ':comments'=>$_REQUEST['comments'], ':due'=>$dt));
+  debuglog("Query -> $ret");
+  $oid = $_CONFIG['db']->lastInsertId();
+  debuglog("CreateOrder oid=$oid");
+  $plunet = new plunetApi();
+  $rh = $plunet->getHandle('DataRequest30');
+  $ret = $rh->insert($plunet->session);
+  $rid = $ret->data;
+  debuglog("CreateOrder got request ID $rid");
+  $res = query("select * from usergroups where id=:id", array(':id'=>$_SETTINGS['user']['usergroup']));
+  debuglog(sprintf("Setting cust %d to %s", $_SETTINGS['user']['usergroup'], $res[0]['requestid']));
+  $rh->setCustomerID($plunet->session, $res[0]['requestid'], $rid);
+  debuglog("Setting user to ".$_SETTINGS['user']['plunetid']);
+  $rh->setCustomerContactID($plunet->session, $rid, $_SETTINGS['user']['plunetid']);
+  if ($_REQUEST['duedate']) {
+    $rh->setDeliveryDate($plunet->session, $_REQUEST['duedate'], $rid);
+  }
+  $rh->setBriefDescription($plunet->session, $_REQUEST['name'], $rid);
+  $rh->setSubject($plunet->session, $_REQUEST['comments'], $rid);
+  debuglog("Updating DB rec");
+  update("update orders set requestid=:pid where id=:id", array(':pid'=>$rid, ':id'=>$oid));
+  $ret = query("select * from orders where id=:oid", array(':oid'=>$oid));
+  unset($ret[0]['id']);
+  $user = query("select * from users where id=:uid", array(':uid'=>$res[0]['user']));
+  $res[0]['user'] = $user[0];
+  unset($res[0]['user']['password']);
+  unset($res[0]['user']['id']);
+  $grp = query("select * from usergroups where id=:gid", array(':gid'=>$res[0]['usergroup']));
+  $res[0]['usergroup'] = $grp[0];
+  unset($res[0]['usergroup']['id']);
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>true, 'data'=>$ret[0]]));
+} catch (Exception $ex) {
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>false, 'errorCode'=>$ex->getCode(), 'errorMessage'=>$ex->getMessage()]));
+}
+
+?>

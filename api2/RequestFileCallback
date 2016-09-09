@@ -1,0 +1,42 @@
+<?php
+include("../lib/apicall.php");
+
+try {
+  auth();
+  
+  if (!$_REQUEST['orderid']) {
+    throw new Exception("RequestFileCallback requires argument \"orderid\"", ERR_INCORRECT_ARGUMENTS);
+  }
+  if (!$_REQUEST['url']) {
+    throw new Exception("RequestFileCallback requires argument \"url\"", ERR_INCORRECT_ARGUMENTS);
+  }
+  if (!$_REQUEST['filename']) {
+    throw new Exception("RequestFileCallback requires argument \"filename\"", ERR_INCORRECT_ARGUMENTS);
+  }
+  if ($argc != 3) {
+    throw new Exception("RequestFileCallback takes excactly three arguments", ERR_INCORRECT_ARGUMENTS);
+  }
+  if ($_SETTINGS['user']['issiteadmin']) {
+    $res = query("select * from orders where requestid=:orderid", array(':orderid'=>$_REQUEST['orderid']));
+  } else if ($_SETTINGS['user']['iscompanyadmin']) {
+    $res = query("select * from orders where usergroup=:grp and requestid=:orderid", array(':grp'=>$_SETTINGS['user']['usergroup'], ':orderid'=>$_REQUEST['orderid']));
+  } else {
+    $res = query("select * from orders where user=:uid and requestid=:orderid", array(':uid'=>$_SETTINGS['user']['id'], ':orderid'=>$_REQUEST['orderid']));
+  }
+  if (!$res[0]) {
+    throw new Exception("Could not find order", ERR_NO_SUCH_ORDER);
+  }
+  $oid = $res[0]['id'];
+  $res = query("select * from files where orderid=:oid and filename=:fn", array(':oid'=>$oid, ':fn'=>$_REQUEST['filename']));
+  if (!$res[0]) {
+    throw new Exception("Could not find file", ERR_NO_SUCH_FILE);
+  }
+  update("insert into callbacks (cbtype, objid, url, status) values ('file', :fid, :url, 'active')", array(':fid'=>$res[0]['id'], ':url'=>$_REQUEST['url']));
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>true]));
+} catch (Exception $ex) {
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>false, 'errorCode'=>$ex->getCode(), 'errorMessage'=>$ex->getMessage()]));
+}
+
+?>

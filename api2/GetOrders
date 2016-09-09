@@ -1,0 +1,28 @@
+<?php
+include("../lib/apicall.php");
+
+try {
+  auth();
+  
+  if ($argc != 0) {
+    throw new Exception("GetOrders takes no arguments", ERR_INCORRECT_ARGUMENTS);
+  }
+
+  $grp = query("select * from usergroups where id=:gid", array(':gid'=>$_SETTINGS['user']['usergroup']));
+  $res = query("select * from orders where user=:uid", array(':uid'=>$_SETTINGS['user']['id']));
+  for ($i = 0; $i < sizeof($res); $i++) {
+    $res[$i]['user'] = $_SETTINGS['user'];
+    unset($res[$i]['id']);
+    unset($res[$i]['user']['password']);
+    unset($res[$i]['user']['id']);
+    $res[$i]['usergroup'] = $grp[0];
+    unset($res[$i]['usergroup']['id']);
+  }
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>true, 'data'=>$res]));
+} catch (Exception $ex) {
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>false, 'errorCode'=>$ex->getCode(), 'errorMessage'=>$ex->getMessage()]));
+}
+
+?>

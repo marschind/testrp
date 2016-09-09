@@ -1,0 +1,17 @@
+<?php
+
+define('ERR_MISSING_AUTHORIZATION', 1);
+define('ERR_BAD_AUTHORIZATION', 2);
+define('ERR_INCORRECT_ARGUMENTS', 3);
+define('ERR_DATABASE_FAILURE', 4);
+define('ERR_PERMISSION_DENIED', 5);
+define('ERR_FILE_EXISTS', 6);
+define('ERR_PLUNET_COM', 7);
+define('ERR_NO_SUCH_ORDER', 8);
+define('ERR_CANNOT_DELETE', 9);
+define('ERR_CANNOT_UPDATE', 10);
+define('ERR_BAD_LANG', 11);
+define('ERR_NO_SUCH_FILE', 12);
+
+
+?>

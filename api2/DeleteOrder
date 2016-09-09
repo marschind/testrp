@@ -1,0 +1,39 @@
+<?php
+include("../lib/apicall.php");
+
+try {
+  auth();
+  
+  if ($argc != 1) {
+    throw new Exception("DeleteOrder takes excactly one argument", ERR_INCORRECT_ARGUMENTS);
+  }
+  if (!$_REQUEST['orderid']) {
+    throw new Exception("DeleteOrder requires argument \"orderid\"", ERR_INCORRECT_ARGUMENTS);
+  }
+  if ($_SETTINGS['user']['issiteadmin']) {
+    $res = query("select * from orders where requestid=:orderid", array(':orderid'=>$_REQUEST['orderid']));
+  } else if ($_SETTINGS['user']['iscompanyadmin']) {
+    $res = query("select * from orders where usergroup=:grp and requestid=:orderid", array(':grp'=>$_SETTINGS['user']['usergroup'], ':orderid'=>$_REQUEST['orderid']));
+  } else {
+    $res = query("select * from orders where user=:uid and requestid=:orderid", array(':uid'=>$_SETTINGS['user']['id'], ':orderid'=>$_REQUEST['orderid']));
+  }
+  if (!$res[0]) {
+    throw new Exception("Could not find order to delete", ERR_NO_SUCH_ORDER);
+  }
+  if ($res[0]['status'] != 'new') {
+debuglog("Got order ".$res[0]['id']." status ".$res[0]['status']);
+    throw new Exception("Work has already started on this order.  Call your Acclaro salesman to cancel.", ERR_CANNOT_DELETE);
+  }
+  update("delete from orders where id=:oid", array(':oid'=>$res[0]['id']));
+  update("delete from files where orderid=:oid", array(':oid'=>$res[0]['id']));
+  $plunet = new plunetApi();
+  $rh = $plunet->getHandle('DataRequest30');
+  $ret = $rh->delete($plunet->session, $res[0]['requestid']);
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>true]));
+} catch (Exception $ex) {
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>false, 'errorCode'=>$ex->getCode(), 'errorMessage'=>$ex->getMessage()]));
+}
+
+?>

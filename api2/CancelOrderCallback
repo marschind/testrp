@@ -1,0 +1,38 @@
+<?php
+include("../lib/apicall.php");
+
+try {
+  auth();
+  
+  if (!$_REQUEST['orderid']) {
+    throw new Exception("CancelOrderCallback requires argument \"orderid\"", ERR_INCORRECT_ARGUMENTS);
+  }
+  if (!$_REQUEST['url']) {
+    throw new Exception("CancelOrderCallback requires argument \"url\"", ERR_INCORRECT_ARGUMENTS);
+  }
+  if ($argc != 2) {
+    throw new Exception("CancelOrderCallback takes excactly two arguments", ERR_INCORRECT_ARGUMENTS);
+  }
+  if ($_SETTINGS['user']['issiteadmin']) {
+    $res = query("select * from orders where requestid=:orderid", array(':orderid'=>$_REQUEST['orderid']));
+  } else if ($_SETTINGS['user']['iscompanyadmin']) {
+    $res = query("select * from orders where usergroup=:grp and requestid=:orderid", array(':grp'=>$_SETTINGS['user']['usergroup'], ':orderid'=>$_REQUEST['orderid']));
+  } else {
+    $res = query("select * from orders where user=:uid and requestid=:orderid", array(':uid'=>$_SETTINGS['user']['id'], ':orderid'=>$_REQUEST['orderid']));
+  }
+  if (!$res[0]) {
+    throw new Exception("Could not find order", ERR_NO_SUCH_ORDER);
+  }
+  $cb = query("select * from callbacks where cbtype='order' and objid=:oid and url=:url", array(:oid=>$res[0]['id'], ':url'=>$_REQUEST['url']));
+  if (!$cb[0]) {
+    throw new Exception("Could not find callback", ERR_NO_SUCH_CALLBACK);
+  }
+  update("delete from callbacks where id=:id", array(':id'=>$cb[0]['id']));
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>true]));
+} catch (Exception $ex) {
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>false, 'errorCode'=>$ex->getCode(), 'errorMessage'=>$ex->getMessage()]));
+}
+
+?>

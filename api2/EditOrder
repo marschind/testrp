@@ -1,0 +1,75 @@
+<?php
+include("../lib/apicall.php");
+
+try {
+  auth();
+  
+  if (!$_REQUEST['orderid']) {
+    throw new Exception("EditOrder requires argument \"orderid\"", ERR_INCORRECT_ARGUMENTS);
+  }
+  if (!$_REQUEST['name']) {
+    $_REQUEST['name'] = '';
+    $argc++;
+  }
+  if (!$_REQUEST['comments']) {
+    $_REQUEST['comments'] = '';
+    $argc++;
+  }
+  if (!isset($_REQUEST['duedate'])) {
+    $argc++;
+  }
+  if ($argc != 4) {
+    throw new Exception("EditOrder takes four arguments: orderid, name, (optional) comments, (optional) duedate", ERR_INCORRECT_ARGUMENTS);
+  }
+
+  $dt = $_REQUEST['duedate'];
+  debuglog("Due date $dt");
+  $old = query("select * from orders where requestid=:pid", array(':pid'=>$_REQUEST['orderid']));
+  $oid = $old[0]['id'];
+  if (!$_REQUEST['name']) { $_REQUEST['name'] = $old[0]['name']; }
+  if ($old[0]['status'] != 'new' && $_REQUEST['name'] != $old[0]['name']) {
+    throw new Exception("You cannot change the name of a submitted order.", ERR_CANNOT_UPDATE);
+  }
+  update("update orders set name=:name, comments=:comments, duedate=:duedate, modified=sysdate() where id=:id",
+	array(':name'=>$_REQUEST['name'], ':comments'=>$_REQUEST['comments'],
+	      ':duedate'=>$dt, ':id'=>$old[0]['id']));
+  $plunet = new plunetApi();
+  if ($old[0]['status'] == 'new') {
+    $rid = $old[0]['requestid'];
+    $rh = $plunet->getHandle('DataRequest30');
+  debuglog("Setting BriefDescription on $rid to $_REQUEST[name]");
+    $rh->setBriefDescription($plunet->session, $_REQUEST['name'], $rid);
+    $rh->setSubject($plunet->session, $_REQUEST['comments'], $rid);
+    if ($_REQUEST['duedate']) {
+      $rh->setDeliveryDate($plunet->session, $_REQUEST['duedate'], $rid);
+    }
+  } else {
+    $rid = $old[0]['orderid'];
+    $rh = $plunet->getHandle('DataOrder30');
+    $rh->setSubject($plunet->session, $_REQUEST['comments'], $rid);
+    if ($_REQUEST['duedate']) {
+      $rh->setDeliveryDeadline($plunet->session, $_REQUEST['duedate'], $rid);
+    }
+  }
+  // Set up any needed callbacks
+  $cbra = query("select * from callbacks where cbtype='order' and objid=:oid", array(':oid'=>$old[0]['id']));
+  foreach ($cbra as $cb) {
+    update("insert into tasks (queued, tasktype, target, info, status) values (sysdate(), 'callback', :oid, :url, 'queued')", array(':oid'=>$cb['orderid'], ':url'=>$cb['url']));
+  }
+  $ret = query("select * from orders where id=:oid", array(':oid'=>$oid));
+  unset($ret[0]['id']);
+  $user = query("select * from users where id=:uid", array(':uid'=>$ret[0]['user']));
+  $ret[0]['user'] = $user[0];
+  unset($res[0]['user']['password']);
+  unset($res[0]['user']['id']);
+  $grp = query("select * from usergroups where id=:gid", array(':gid'=>$ret[0]['usergroup']));
+  $ret[0]['usergroup'] = $grp[0];
+  unset($res[0]['usergroup']['id']);
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>true, 'data'=>$ret[0]]));
+} catch (Exception $ex) {
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>false, 'errorCode'=>$ex->getCode(), 'errorMessage'=>$ex->getMessage()]));
+}
+
+?>

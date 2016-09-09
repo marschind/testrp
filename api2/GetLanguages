@@ -1,0 +1,22 @@
+<?php
+include("../lib/apicall.php");
+
+try {
+  auth();
+  
+  if ($argc != 0) {
+    throw new Exception("GetLanguages takes no arguments", ERR_INCORRECT_ARGUMENTS);
+  }
+
+  $res = query("select * from languages", array());
+  for ($i = 0; $i < sizeof($res); $i++) {
+    unset($res[$i]['id']);
+  }
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>true, 'data'=>$res]));
+} catch (Exception $ex) {
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>false, 'errorCode'=>$ex->getCode(), 'errorMessage'=>$ex->getMessage()]));
+}
+
+?>

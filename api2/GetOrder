@@ -1,0 +1,38 @@
+<?php
+include("../lib/apicall.php");
+
+try {
+  auth();
+  
+  if ($argc != 1) {
+    throw new Exception("GetOrder takes excactly one argument", ERR_INCORRECT_ARGUMENTS);
+  }
+  if (!$_REQUEST['orderid']) {
+    throw new Exception("GetOrder requires argument \"orderid\"", ERR_INCORRECT_ARGUMENTS);
+  }
+  if ($_SETTINGS['user']['issiteadmin']) {
+    $res = query("select * from orders where requestid=:orderid", array(':orderid'=>$_REQUEST['orderid']));
+  } else if ($_SETTINGS['user']['iscompanyadmin']) {
+    $res = query("select * from orders where usergroup=:grp and requestid=:orderid", array(':grp'=>$_SETTINGS['user']['usergroup'], ':orderid'=>$_REQUEST['orderid']));
+  } else {
+    $res = query("select * from orders where user=:uid and requestid=:orderid", array(':uid'=>$_SETTINGS['user']['id'], ':orderid'=>$_REQUEST['orderid']));
+  }
+  if (!$res[0]) {
+    $res[0] = array();
+  }
+  $user = query("select * from users where id=:uid", array(':uid'=>$res[0]['user']));
+  $res[0]['user'] = $user[0];
+  unset($res[0]['id']);
+  unset($res[0]['user']['password']);
+  unset($res[0]['user']['id']);
+  $grp = query("select * from usergroups where id=:gid", array(':gid'=>$res[0]['usergroup']));
+  $res[0]['usergroup'] = $grp[0];
+  unset($res[0]['usergroup']['id']);
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>true, 'data'=>$res[0]]));
+} catch (Exception $ex) {
+  header("Mime-type: application/json");
+  print(json_encode(['success'=>false, 'errorCode'=>$ex->getCode(), 'errorMessage'=>$ex->getMessage()]));
+}
+
+?>
